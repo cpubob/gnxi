@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	log "github.com/golang/glog"
 	"github.com/golang/protobuf/proto"
@@ -52,6 +53,7 @@ var (
 	targetName   = flag.String("target_name", "hostname.com", "The target name use to verify the hostname returned by TLS handshake")
 	timeOut      = flag.Duration("time_out", 10*time.Second, "Timeout for the Get request, 10 seconds by default")
 	encodingName = flag.String("encoding", "JSON_IETF", "value encoding format to be used")
+	forceElement = flag.Bool("force_element", false, "Store path in deprecate Element format")
 )
 
 func main() {
@@ -82,11 +84,18 @@ func main() {
 
 	var pbPathList []*pb.Path
 	for _, xPath := range xPathFlags {
-		pbPath, err := xpath.ToGNMIPath(xPath)
-		if err != nil {
-			log.Exitf("error in parsing xpath %q to gnmi path", xPath)
+		if *forceElement {
+			p := strings.Split(stripQuotes(xPath), "/")
+			pbPathList = append(pbPathList, &pb.Path{
+				Element: p,
+			})
+		} else {
+			pbPath, err := xpath.ToGNMIPath(xPath)
+			if err != nil {
+				log.Exitf("error in parsing xpath %q to gnmi path", xPath)
+			}
+			pbPathList = append(pbPathList, pbPath)
 		}
-		pbPathList = append(pbPathList, pbPath)
 	}
 	for _, textPbPath := range pbPathFlags {
 		var pbPath pb.Path
@@ -111,4 +120,12 @@ func main() {
 
 	fmt.Println("== getResponse:")
 	utils.PrintProto(getResponse)
+}
+
+func stripQuotes(s string) string {
+	f := func(c rune) bool {
+		return unicode.In(c, unicode.Quotation_Mark)
+	}
+	// Strip any leading/trailing quotes or spaces.
+	return strings.TrimSpace(strings.TrimFunc(string(s), f))
 }
